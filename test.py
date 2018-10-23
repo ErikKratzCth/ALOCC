@@ -64,16 +64,16 @@ def main(_):
     lst_test_dirs = ['Test004','Test005','Test006']
 
     #DATASET PARAMETER : MNIST
-    #FLAGS.dataset = 'mnist'
-    #FLAGS.dataset_address = './dataset/mnist'
-    #nd_input_frame_size = (28, 28)
-    #nd_patch_size = (28, 28)
-    #FLAGS.checkpoint_dir = "./checkpoint/mnist_128_28_28/"
+    FLAGS.dataset = 'mnist'
+    FLAGS.dataset_address = './dataset/mnist'
+    nd_input_frame_size = (28, 28)
+    nd_patch_size = (28, 28)
+    FLAGS.checkpoint_dir = "./checkpoint/mnist_128_28_28/"
 
-    #FLAGS.input_width = nd_patch_size[0]
-    #FLAGS.input_height = nd_patch_size[1]
-    #FLAGS.output_width = nd_patch_size[0]
-    #FLAGS.output_height = nd_patch_size[1]
+    FLAGS.input_width = nd_patch_size[0]
+    FLAGS.input_height = nd_patch_size[1]
+    FLAGS.output_width = nd_patch_size[0]
+    FLAGS.output_height = nd_patch_size[1]
 
 
     check_some_assertions()
