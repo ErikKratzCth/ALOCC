@@ -1,5 +1,6 @@
 from __future__ import division
-from tensorflow.examples.tutorials.mnist import input_data
+#from tensorflow.examples.tutorials.mnist import input_data
+import tensorflow as tf
 import re
 from ops import *
 from utils import *
@@ -88,9 +89,11 @@ class ALOCC_Model(object):
       logging.basicConfig(filename='ALOCC_loss.log', level=logging.INFO)
 
     if self.dataset_name == 'mnist':
-      mnist = input_data.read_data_sets(self.dataset_address)
-      specific_idx = np.where(mnist.train.labels == self.attention_label)[0]
-      self.data = mnist.train.images[specific_idx].reshape(-1, 28, 28, 1)
+      mnist = tf.keras.datasets.mnist
+      #mnist = input_data.read_data_sets(self.dataset_address)
+      (x_train, y_train),(x_test, y_test) = mnist.load_data()
+      specific_idx = np.where(y_train == self.attention_label)[0]
+      self.data = x_train[specific_idx].reshape(-1, 28, 28, 1)
       self.c_dim = 1
     elif self.dataset_name == 'UCSD':
       self.nStride = n_stride
