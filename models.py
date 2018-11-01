@@ -7,7 +7,7 @@ from utils import *
 from kh_tools import *
 import logging
 import matplotlib.pyplot as plt
-from loadbdd100k import load_bdd100k_attribute_spec, load_bdd100k_data_filename_list
+from loadbdd100k import load_bdd100k_data_attribute_spec, load_bdd100k_data_filename_list
 from configuration import Configuration as cfg
 
 class ALOCC_Model(object):
@@ -629,6 +629,7 @@ class ALOCC_Model(object):
         lst_generated_img.extend(results_g)
         print('finish pp ... {}/{}'.format(i,batch_idxs))
 
+    return results_d, results_g
     #f = plt.figure()
     #plt.plot(np.array(lst_discriminator_v))
     #f.savefig('samples/d_values.jpg')

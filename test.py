@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.examples.tutorials.mnist import input_data
+#from tensorflow.examples.tutorials.mnist import input_data
 from utils import pp, visualize, to_json, show_all_variables
 from models import ALOCC_Model
 import matplotlib.pyplot as plt
@@ -122,18 +122,21 @@ def main(_):
         tmp_ALOCC_model.f_check_checkpoint()
 
         if FLAGS.dataset=='mnist':
-            mnist = input_data.read_data_sets(FLAGS.dataset_address)
-
-            specific_idx_anomaly = np.where(mnist.train.labels != 6)[0]
-            specific_idx = np.where(mnist.train.labels == 6)[0]
+            #mnist = input_data.read_data_sets(FLAGS.dataset_address)
+            mnist = tf.keras.datasets.mnist
+            (x_train, y_train),(x_test, y_test) = mnist.load_data() 
+            
+            specific_idx_anomaly = np.where(y_train != 6)[0]
+            specific_idx = np.where(y_train == 6)[0]
             ten_precent_anomaly = [specific_idx_anomaly[x] for x in
                                    random.sample(range(0, len(specific_idx_anomaly)), len(specific_idx) // 40)]
 
-            data = mnist.train.images[specific_idx].reshape(-1, 28, 28, 1)
-            tmp_data = mnist.train.images[ten_precent_anomaly].reshape(-1, 28, 28, 1)
+            data = x_train[specific_idx].reshape(-1, 28, 28, 1)
+            tmp_data = x_train[ten_precent_anomaly].reshape(-1, 28, 28, 1)
             data = np.append(data, tmp_data).reshape(-1, 28, 28, 1)
 
-            lst_prob = tmp_ALOCC_model.f_test_frozen_model(data[0:FLAGS.batch_size])
+            results_d, _ = tmp_ALOCC_model.f_test_frozen_model(data[0:FLAGS.batch_size])
+
             print('check is ok')
             exit()
             #generated_data = tmp_ALOCC_model.feed2generator(data[0:FLAGS.batch_size])

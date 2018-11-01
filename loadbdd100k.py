@@ -111,7 +111,7 @@ def load_bdd100k_data_filename_list(img_folder, norm_filenames, out_filenames, n
     print("Initializing datasets...")
     if channels_first:
         norm_data = np.ndarray(shape=(n_norm_to_choose, channels,image_height, image_width), dtype=np.uint8)
-    out_data = np.ndarray(shape=(n_out_to_choose, channels, image_height, image_width), dtype=np.uint8)
+        out_data = np.ndarray(shape=(n_out_to_choose, channels, image_height, image_width), dtype=np.uint8)
     else:
         norm_data = np.ndarray(shape=(n_norm_to_choose, image_height, image_width, channels), dtype=np.uint8)
         out_data = np.ndarray(shape=(n_out_to_choose, image_height, image_width, channels), dtype=np.uint8)
