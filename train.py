@@ -10,7 +10,7 @@ flags.DEFINE_float("learning_rate", 0.002, "Learning rate of for adam [0.0002]")
 flags.DEFINE_float("beta1", 0.5, "Momentum term of adam [0.5]")
 flags.DEFINE_integer("attention_label", 1, "Conditioned label that growth attention of training label [1]")
 flags.DEFINE_float("r_alpha", 0.2, "Refinement parameter [0.2]")
-flags.DEFINE_integer("train_size", np.inf, "The size of train images [np.inf]")
+flags.DEFINE_integer("train_size", 5000, "The size of train images [np.inf]")
 flags.DEFINE_integer("batch_size",128, "The size of batch images [64]")
 flags.DEFINE_integer("input_height", 45, "The size of image to use. [45]")
 flags.DEFINE_integer("input_width", None, "The size of image to use. If None, same value as input_height [None]")
@@ -58,16 +58,18 @@ def main(_):
     #FLAGS.dataset = 'UCSD'
     #FLAGS.dataset_address = './dataset/UCSD_Anomaly_Dataset.v1p2/UCSDped2/Train'
 
-    nd_input_frame_size = (240, 360)
-    nd_slice_size = (45, 45)
-    n_stride = 25
-    n_fetch_data = 600
+    # nd_input_frame_size = (240, 360)
+    #nd_slice_size = (45, 45)
+    #n_stride = 25
+    #n_fetch_data = 600
     # ---------------------------------------------------------------------------------------------
     # # DATASET PARAMETER : MNIST
-    # FLAGS.dataset = 'mnist'
-    # FLAGS.dataset_address = './dataset/mnist'
-    # nd_input_frame_size = (28, 28)
-    # nd_slice_size = (28, 28)
+    FLAGS.dataset = 'mnist'
+    FLAGS.dataset_address = './dataset/mnist'
+    nd_input_frame_size = (28, 28)
+    nd_slice_size = (28, 28)
+    n_stride = 1
+    n_fetch_data = 600
 
     FLAGS.train = True
 
@@ -83,7 +85,7 @@ def main(_):
 
     # manual handling of GPU
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.4)
-    run_config = tf.ConfigProto(gpu_options=gpu_options)
+    run_config = tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False)
     run_config.gpu_options.allow_growth=True
 
     with tf.Session(config=run_config) as sess:

@@ -1,17 +1,20 @@
 from __future__ import division
-from tensorflow.examples.tutorials.mnist import input_data
+#from tensorflow.examples.tutorials.mnist import input_data
+import tensorflow as tf
 import re
 from ops import *
 from utils import *
 from kh_tools import *
 import logging
 import matplotlib.pyplot as plt
+from loadbdd100k import load_bdd100k_data_attribute_spec, load_bdd100k_data_filename_list
+from configuration import Configuration as cfg
 
 class ALOCC_Model(object):
   def __init__(self, sess,
-               input_height=45,input_width=45, output_height=64, output_width=64,
+               input_height=28,input_width=28, output_height=28, output_width=28,
                batch_size=128, sample_num = 128, attention_label=1, is_training=True,
-               z_dim=100, gf_dim=16, df_dim=16, gfc_dim=512, dfc_dim=512, c_dim=3,
+               z_dim=100, gf_dim=64, df_dim=64, gfc_dim=512, dfc_dim=512, c_dim=3,
                dataset_name=None, dataset_address=None, input_fname_pattern=None,
                checkpoint_dir=None, log_dir=None, sample_dir=None, r_alpha = 0.2,
                kb_work_on_patch=True, nd_input_frame_size=(240, 360), nd_patch_size=(10, 10), n_stride=1,
@@ -68,6 +71,9 @@ class ALOCC_Model(object):
     self.d_bn2 = batch_norm(name='d_bn2')
     self.d_bn3 = batch_norm(name='d_bn3')
     self.d_bn4 = batch_norm(name='d_bn4')
+    self.d_bn5 = batch_norm(name='d_bn5')
+    self.d_bn6 = batch_norm(name='d_bn6')
+
     self.g_bn0 = batch_norm(name='g_bn0')
     self.g_bn1 = batch_norm(name='g_bn1')
     self.g_bn2 = batch_norm(name='g_bn2')
@@ -75,6 +81,9 @@ class ALOCC_Model(object):
     self.g_bn4 = batch_norm(name='g_bn4')
     self.g_bn5 = batch_norm(name='g_bn5')
     self.g_bn6 = batch_norm(name='g_bn6')
+    self.g_bn7 = batch_norm(name='g_bn7')
+    self.g_bn8 = batch_norm(name='g_bn8')
+    self.g_bn9 = batch_norm(name='g_bn9')
 
     self.dataset_name = dataset_name
     self.dataset_address= dataset_address
@@ -88,10 +97,15 @@ class ALOCC_Model(object):
       logging.basicConfig(filename='ALOCC_loss.log', level=logging.INFO)
 
     if self.dataset_name == 'mnist':
-      mnist = input_data.read_data_sets(self.dataset_address)
-      specific_idx = np.where(mnist.train.labels == self.attention_label)[0]
-      self.data = mnist.train.images[specific_idx].reshape(-1, 28, 28, 1)
+      mnist = tf.keras.datasets.mnist
+      #mnist = input_data.read_data_sets(self.dataset_address)
+      (x_train, y_train),(x_test, y_test) = mnist.load_data()
+      specific_idx = np.where(y_train == self.attention_label)[0]
+      print("Inlier digit: ", self.attention_label)
+      self.data = x_train[specific_idx].reshape(-1, 28, 28, 1)
       self.c_dim = 1
+      print("Training data length: ", len(self.data))
+
     elif self.dataset_name == 'UCSD':
       self.nStride = n_stride
       self.patch_size = nd_patch_size
@@ -105,6 +119,12 @@ class ALOCC_Model(object):
 
       self.data = lst_forced_fetch_data
       self.c_dim = 1
+
+    elif self.dataset_name == "bdd100k":
+      self.c_dim = 3
+      self.dataAddress = cfg.img_folder
+      self.data, _, _, _ = load_bdd100k_data_filename_list(cfg.img_folder, cfg.norm_filenames, cfg.out_filenames, cfg.n_train, cfg.n_val, cfg.n_test, cfg.out_frac, self.input_height, self.input_width, self.c_dim, get_norm_and_out_sets=cfg.get_norm_and_out_sets, shuffle=cfg.shuffle)
+
     else:
       assert('Error in loading dataset')
 
@@ -188,6 +208,8 @@ class ALOCC_Model(object):
       sample,_ = read_lst_images(sample_files, self.patch_size, self.patch_step, self.b_work_on_patch)
       sample = np.array(sample).reshape(-1, self.patch_size[0], self.patch_size[1], 1)
       sample = sample[0:self.sample_num]
+    elif config.dataset == 'bdd100k':
+      sample = self.data[0:self.sample_num]
 
     # export images
     sample_inputs = np.array(sample).astype(np.float32)
@@ -212,6 +234,8 @@ class ALOCC_Model(object):
       sample = np.array(sample).reshape(-1, self.patch_size[0], self.patch_size[1], 1)
       sample_w_noise,_ = read_lst_images_w_noise(sample_files, self.patch_size, self.patch_step)
       sample_w_noise = np.array(sample_w_noise).reshape(-1, self.patch_size[0], self.patch_size[1], 1)
+    if config.dataset == 'bdd100k':
+      sample_w_noise = get_noisy_data(self.data)
 
     for epoch in xrange(config.epoch):
       print('Epoch ({}/{})-------------------------------------------------'.format(epoch,config.epoch))
@@ -219,6 +243,8 @@ class ALOCC_Model(object):
         batch_idxs = min(len(self.data), config.train_size) // config.batch_size
       elif config.dataset == 'UCSD':
         batch_idxs = min(len(sample), config.train_size) // config.batch_size
+      elif config.dataset == 'bdd100k':
+        batch_idxs = min(len(self.data), config.train_size) // config.batch_size
 
       # for detecting valuable epoch that we must stop training step
       # sample_input_for_test_each_train_step.npy
@@ -231,6 +257,9 @@ class ALOCC_Model(object):
         elif config.dataset == 'UCSD':
           batch = sample[idx * config.batch_size:(idx + 1) * config.batch_size]
           batch_noise = sample_w_noise[idx * config.batch_size:(idx + 1) * config.batch_size]
+        elif config.dataset == 'bdd100k':
+          batch = self.data[idx * config.batch_size:(idx + 1) * config.batch_size]
+          batch_noise = sample_w_noise[idx * config.batch_size:(idx + 1) * config.batch_size]
 
         batch_images = np.array(batch).astype(np.float32)
         batch_noise_images = np.array(batch_noise).astype(np.float32)
@@ -240,21 +269,21 @@ class ALOCC_Model(object):
         if config.dataset == 'mnist':
           # Update D network
           _, summary_str = self.sess.run([d_optim, self.d_sum],
-                                         feed_dict={self.inputs: batch_images, self.z: batch_noise_images})
+                                         feed_dict={ self.inputs: batch_images, self.z: batch_noise_images })
           self.writer.add_summary(summary_str, counter)
 
           # Update G network
           _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                         feed_dict={self.z: batch_noise_images})
+                                         feed_dict={ self.z: batch_noise_images })
           self.writer.add_summary(summary_str, counter)
 
           # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
           _, summary_str = self.sess.run([g_optim, self.g_sum],
-                                         feed_dict={self.z: batch_noise_images})
+                                         feed_dict={ self.z: batch_noise_images })
           self.writer.add_summary(summary_str, counter)
 
-          errD_fake = self.d_loss_fake.eval({self.z: batch_noise_images})
-          errD_real = self.d_loss_real.eval({self.inputs: batch_images})
+          errD_fake = self.d_loss_fake.eval({ self.z: batch_noise_images })
+          errD_real = self.d_loss_real.eval({ self.inputs: batch_images })
           errG = self.g_loss.eval({self.z: batch_noise_images})
         else:
           # update discriminator
@@ -332,71 +361,182 @@ class ALOCC_Model(object):
     with tf.variable_scope("discriminator") as scope:
       if reuse:
         scope.reuse_variables()
+      if self.dataset_name in ["mnist", "UCSD"]:
+      # df_dim defaults to 64
+        h0 = lrelu(conv2d(image, self.df_dim, name='d_h0_conv'))
+        h1 = lrelu(self.d_bn1(conv2d(h0, self.df_dim*2, name='d_h1_conv')))
+        h2 = lrelu(self.d_bn2(conv2d(h1, self.df_dim*4, name='d_h2_conv')))
+        h3 = lrelu(self.d_bn3(conv2d(h2, self.df_dim*8, name='d_h3_conv')))
+        h4 = linear(tf.reshape(h3, [self.batch_size, -1]), 1, 'd_h3_lin')
+        h5 = tf.nn.sigmoid(h4,name='d_output')
+        
+        return h5, h4
 
+      elif self.dataset_name == "bdd100k": # for 256x256 images
+        h0 = lrelu(conv2d(image, self.df_dim/4         , name='d_h0_conv'))
+        h1 = lrelu(self.d_bn1(conv2d(h0, self.df_dim/2 , name='d_h1_conv')))
+        h2 = lrelu(self.d_bn2(conv2d(h1, self.df_dim  , name='d_h2_conv')))
+        h3 = lrelu(self.d_bn3(conv2d(h2, self.df_dim* 2, name='d_h3_conv')))
+        h4 = lrelu(self.d_bn4(conv2d(h3, self.df_dim* 4, name='d_h4_conv')))
+        h5 = lrelu(self.d_bn5(conv2d(h4, self.df_dim* 8, name='d_h5_conv')))
+        h6 = lrelu(self.d_bn6(conv2d(h5, self.df_dim*16, name='d_h6_conv')))
+        h7 = linear(tf.reshape(h6, [self.batch_size, -1]), 1, 'd_h6_lin')
+        h8 = tf.nn.sigmoid(h7,name='d_output')
 
-      h0 = lrelu(conv2d(image, self.df_dim, name='d_h0_conv'))
-      h1 = lrelu(self.d_bn1(conv2d(h0, self.df_dim*2, name='d_h1_conv')))
-      h2 = lrelu(self.d_bn2(conv2d(h1, self.df_dim*4, name='d_h2_conv')))
-      h3 = lrelu(self.d_bn3(conv2d(h2, self.df_dim*8, name='d_h3_conv')))
-      h4 = linear(tf.reshape(h3, [self.batch_size, -1]), 1, 'd_h3_lin')
-      h5 = tf.nn.sigmoid(h4,name='d_output')
-      return h5, h4
+        return h8, h7
 
   # =========================================================================================================
   def generator(self, z):
     with tf.variable_scope("generator") as scope:
+      
+      if self.dataset_name in ['mnist', 'UCSD']:
 
-      s_h, s_w = self.output_height, self.output_width
-      s_h2, s_w2 = conv_out_size_same(s_h, 2), conv_out_size_same(s_w, 2)
-      s_h4, s_w4 = conv_out_size_same(s_h2, 2), conv_out_size_same(s_w2, 2)
-      s_h8, s_w8 = conv_out_size_same(s_h4, 2), conv_out_size_same(s_w4, 2)
-      s_h16, s_w16 = conv_out_size_same(s_h8, 2), conv_out_size_same(s_w8, 2)
+        # Compute output shapes for decoding steps
+        s_h, s_w = self.output_height, self.output_width
+        s_h2, s_w2 = conv_out_size_same(s_h, 2), conv_out_size_same(s_w, 2)
+        s_h4, s_w4 = conv_out_size_same(s_h2, 2), conv_out_size_same(s_w2, 2)
+        s_h8, s_w8 = conv_out_size_same(s_h4, 2), conv_out_size_same(s_w4, 2)
+        s_h16, s_w16 = conv_out_size_same(s_h8, 2), conv_out_size_same(s_w8, 2)
 
-      hae0 = lrelu(self.g_bn4(conv2d(z   , self.df_dim * 2, name='g_encoder_h0_conv')))
-      hae1 = lrelu(self.g_bn5(conv2d(hae0, self.df_dim * 4, name='g_encoder_h1_conv')))
-      hae2 = lrelu(self.g_bn6(conv2d(hae1, self.df_dim * 8, name='g_encoder_h2_conv')))
+        # Encode
+        hae0 = lrelu(self.g_bn4(conv2d(z   , self.df_dim * 2, name='g_encoder_h0_conv')))
+        hae1 = lrelu(self.g_bn5(conv2d(hae0, self.df_dim * 4, name='g_encoder_h1_conv')))
+        hae2 = lrelu(self.g_bn6(conv2d(hae1, self.df_dim * 8, name='g_encoder_h2_conv')))
 
-      h2, self.h2_w, self.h2_b = deconv2d(
-        hae2, [self.batch_size, s_h4, s_w4, self.gf_dim*2], name='g_decoder_h1', with_w=True)
-      h2 = tf.nn.relu(self.g_bn2(h2))
+        # Decode
+        h2, self.h2_w, self.h2_b = deconv2d(
+          hae2, [self.batch_size, s_h4, s_w4, self.gf_dim * 2], name='g_decoder_h1', with_w=True)
+        h2 = tf.nn.relu(self.g_bn2(h2))
 
-      h3, self.h3_w, self.h3_b = deconv2d(
-          h2, [self.batch_size, s_h2, s_w2, self.gf_dim*1], name='g_decoder_h0', with_w=True)
-      h3 = tf.nn.relu(self.g_bn3(h3))
+        h3, self.h3_w, self.h3_b = deconv2d(
+          h2, [self.batch_size, s_h2, s_w2, self.gf_dim * 1], name='g_decoder_h0', with_w=True)
+        h3 = tf.nn.relu(self.g_bn3(h3))
 
-      h4, self.h4_w, self.h4_b = deconv2d(
+        h4, self.h4_w, self.h4_b = deconv2d(
           h3, [self.batch_size, s_h, s_w, self.c_dim], name='g_decoder_h00', with_w=True)
 
-      return tf.nn.tanh(h4,name='g_output')
+        return tf.nn.tanh(h4,name='g_output')
+
+      elif self.dataset_name == 'bdd100k':
+
+        # Compute output shapes for decoding steps
+        s_h, s_w = self.output_height, self.output_width
+        s_h2, s_w2 = conv_out_size_same(s_h, 2), conv_out_size_same(s_w, 2)
+        s_h4, s_w4 = conv_out_size_same(s_h2, 2), conv_out_size_same(s_w2, 2)
+        s_h8, s_w8 = conv_out_size_same(s_h4, 2), conv_out_size_same(s_w4, 2)
+        s_h16, s_w16 = conv_out_size_same(s_h8, 2), conv_out_size_same(s_w8, 2)
+        s_h32, s_w32 = conv_out_size_same(s_h16, 2), conv_out_size_same(s_w16, 2)
+
+        # Encode
+        hae0 = lrelu(self.g_bn4(conv2d(z   , self.df_dim / 4, name='g_encoder_h0_conv')))
+        hae1 = lrelu(self.g_bn5(conv2d(hae0, self.df_dim / 2, name='g_encoder_h1_conv')))
+        hae2 = lrelu(self.g_bn6(conv2d(hae1, self.df_dim    , name='g_encoder_h2_conv')))
+        hae3 = lrelu(self.g_bn7(conv2d(hae2, self.df_dim * 2, name='g_encoder_h3_conv')))
+        hae4 = lrelu(self.g_bn8(conv2d(hae3, self.df_dim * 4, name='g_encoder_h4_conv')))
+        hae5 = lrelu(self.g_bn9(conv2d(hae4, self.df_dim * 8, name='g_encoder_h5_conv')))
+
+        # Decode
+        h1, self.h1_w, self.h1_b = deconv2d(
+          hae5, [self.batch_size, s_h32, s_w32, self.gf_dim*8], name='g_decoder_h1', with_w=True)
+        h2 = tf.nn.relu(self.g_bn2(h2))
+
+        h2, self.h2_w, self.h2_b = deconv2d(
+          h1, [self.batch_size, s_h16, s_w16, self.gf_dim*4], name='g_decoder_h2', with_w=True)
+        h2 = tf.nn.relu(self.g_bn2(h2))
+
+        h3, self.h3_w, self.h3_b = deconv2d(
+          h2,   [self.batch_size, s_h8, s_w8,   self.gf_dim*2], name='g_decoder_h3', with_w=True)
+        h3 = tf.nn.relu(self.g_bn3(h3))
+
+        h4, self.h4_w, self.h4_b = deconv2d(
+          h3,   [self.batch_size, s_h4, s_w4,   self.c_dim   ], name='g_decoder_h4', with_w=True)
+        h4 = tf.nn.relu(self.g_bn4(h4))
+
+        h5, self.h5_w, self.h5_b = deconv2d(
+          h4,   [self.batch_size, s_h2, s_w2,   self.gf_dim/2], name='g_decoder_h5', with_w=True)
+        h5 = tf.nn.relu(self.g_bn5(h5))
+
+        h6, self.h6_w, self.h6_b = deconv2d(
+          h5,   [self.batch_size, s_h, s_w,     self.c_dim],    name='g_decoder_h6', with_w=True)
+
+        return tf.nn.tanh(h6,name='g_output')
 
   # =========================================================================================================
-  def sampler(self, z, y=None):
+  def sampler(self, z, y=None): # identical code to "generator" above
     with tf.variable_scope("generator") as scope:
       scope.reuse_variables()
 
-      s_h, s_w = self.output_height, self.output_width
-      s_h2, s_w2 = conv_out_size_same(s_h, 2), conv_out_size_same(s_w, 2)
-      s_h4, s_w4 = conv_out_size_same(s_h2, 2), conv_out_size_same(s_w2, 2)
-      s_h8, s_w8 = conv_out_size_same(s_h4, 2), conv_out_size_same(s_w4, 2)
-      s_h16, s_w16 = conv_out_size_same(s_h8, 2), conv_out_size_same(s_w8, 2)
+      if self.dataset_name in ['mnist', 'UCSD']:
 
-      hae0 = lrelu(self.g_bn4(conv2d(z, self.df_dim * 2, name='g_encoder_h0_conv')))
-      hae1 = lrelu(self.g_bn5(conv2d(hae0, self.df_dim * 4, name='g_encoder_h1_conv')))
-      hae2 = lrelu(self.g_bn6(conv2d(hae1, self.df_dim * 8, name='g_encoder_h2_conv')))
+        # Compute output shapes for decoding steps
+        s_h, s_w = self.output_height, self.output_width
+        s_h2, s_w2 = conv_out_size_same(s_h, 2), conv_out_size_same(s_w, 2)
+        s_h4, s_w4 = conv_out_size_same(s_h2, 2), conv_out_size_same(s_w2, 2)
+        s_h8, s_w8 = conv_out_size_same(s_h4, 2), conv_out_size_same(s_w4, 2)
+        s_h16, s_w16 = conv_out_size_same(s_h8, 2), conv_out_size_same(s_w8, 2)
 
-      h2, self.h2_w, self.h2_b = deconv2d(
-        hae2, [self.batch_size, s_h4, s_w4, self.gf_dim * 2], name='g_decoder_h1', with_w=True)
-      h2 = tf.nn.relu(self.g_bn2(h2))
+        # Encode
+        hae0 = lrelu(self.g_bn4(conv2d(z   , self.df_dim * 2, name='g_encoder_h0_conv')))
+        hae1 = lrelu(self.g_bn5(conv2d(hae0, self.df_dim * 4, name='g_encoder_h1_conv')))
+        hae2 = lrelu(self.g_bn6(conv2d(hae1, self.df_dim * 8, name='g_encoder_h2_conv')))
 
-      h3, self.h3_w, self.h3_b = deconv2d(
-        h2, [self.batch_size, s_h2, s_w2, self.gf_dim * 1], name='g_decoder_h0', with_w=True)
-      h3 = tf.nn.relu(self.g_bn3(h3))
+        # Decode
+        h2, self.h2_w, self.h2_b = deconv2d(
+          hae2, [self.batch_size, s_h4, s_w4, self.gf_dim * 2], name='g_decoder_h1', with_w=True)
+        h2 = tf.nn.relu(self.g_bn2(h2))
 
-      h4, self.h4_w, self.h4_b = deconv2d(
-        h3, [self.batch_size, s_h, s_w, self.c_dim], name='g_decoder_h00', with_w=True)
+        h3, self.h3_w, self.h3_b = deconv2d(
+          h2, [self.batch_size, s_h2, s_w2, self.gf_dim * 1], name='g_decoder_h0', with_w=True)
+        h3 = tf.nn.relu(self.g_bn3(h3))
 
-      return tf.nn.tanh(h4,name='g_output')
+        h4, self.h4_w, self.h4_b = deconv2d(
+          h3, [self.batch_size, s_h, s_w, self.c_dim], name='g_decoder_h00', with_w=True)
 
+        return tf.nn.tanh(h4,name='g_output')
+
+      elif self.dataset_name == 'bdd100k':
+
+        # Compute output shapes for decoding steps
+        s_h, s_w = self.output_height, self.output_width
+        s_h2, s_w2 = conv_out_size_same(s_h, 2), conv_out_size_same(s_w, 2)
+        s_h4, s_w4 = conv_out_size_same(s_h2, 2), conv_out_size_same(s_w2, 2)
+        s_h8, s_w8 = conv_out_size_same(s_h4, 2), conv_out_size_same(s_w4, 2)
+        s_h16, s_w16 = conv_out_size_same(s_h8, 2), conv_out_size_same(s_w8, 2)
+        s_h32, s_w32 = conv_out_size_same(s_h16, 2), conv_out_size_same(s_w16, 2)
+
+        # Encode
+        hae0 = lrelu(self.g_bn4(conv2d(z   , self.df_dim / 4, name='g_encoder_h0_conv')))
+        hae1 = lrelu(self.g_bn5(conv2d(hae0, self.df_dim / 2, name='g_encoder_h1_conv')))
+        hae2 = lrelu(self.g_bn6(conv2d(hae1, self.df_dim    , name='g_encoder_h2_conv')))
+        hae3 = lrelu(self.g_bn7(conv2d(hae2, self.df_dim * 2, name='g_encoder_h3_conv')))
+        hae4 = lrelu(self.g_bn8(conv2d(hae3, self.df_dim * 4, name='g_encoder_h4_conv')))
+        hae5 = lrelu(self.g_bn9(conv2d(hae4, self.df_dim * 8, name='g_encoder_h5_conv')))
+
+        # Decode
+        h1, self.h1_w, self.h1_b = deconv2d(
+          hae5, [self.batch_size, s_h32, s_w32, self.gf_dim*8], name='g_decoder_h1', with_w=True)
+        h2 = tf.nn.relu(self.g_bn2(h2))
+
+        h2, self.h2_w, self.h2_b = deconv2d(
+          h1, [self.batch_size, s_h16, s_w16, self.gf_dim*4], name='g_decoder_h2', with_w=True)
+        h2 = tf.nn.relu(self.g_bn2(h2))
+
+        h3, self.h3_w, self.h3_b = deconv2d(
+          h2,   [self.batch_size, s_h8, s_w8,   self.gf_dim*2], name='g_decoder_h3', with_w=True)
+        h3 = tf.nn.relu(self.g_bn3(h3))
+
+        h4, self.h4_w, self.h4_b = deconv2d(
+          h3,   [self.batch_size, s_h4, s_w4,   self.c_dim   ], name='g_decoder_h4', with_w=True)
+        h4 = tf.nn.relu(self.g_bn4(h4))
+
+        h5, self.h5_w, self.h5_b = deconv2d(
+          h4,   [self.batch_size, s_h2, s_w2,   self.gf_dim/2], name='g_decoder_h5', with_w=True)
+        h5 = tf.nn.relu(self.g_bn5(h5))
+
+        h6, self.h6_w, self.h6_b = deconv2d(
+          h5,   [self.batch_size, s_h, s_w,     self.c_dim],    name='g_decoder_h6', with_w=True)
+
+        return tf.nn.tanh(h6,name='g_output')
   # =========================================================================================================
   @property
   def model_dir(self):
@@ -489,7 +629,7 @@ class ALOCC_Model(object):
 
         lst_discriminator_v.extend(results_d)
         lst_generated_img.extend(results_g)
-        print('finish pp ... {}/{}'.format(i,batch_idxs))
+        print('Tested batch {}/{}'.format(i+1,batch_idxs))
 
     #f = plt.figure()
     #plt.plot(np.array(lst_discriminator_v))
@@ -497,3 +637,5 @@ class ALOCC_Model(object):
 
     scipy.misc.imsave('./'+self.sample_dir+'/ALOCC_generated.jpg', montage(np.array(lst_generated_img)[:,:,:,0]))
     scipy.misc.imsave('./'+self.sample_dir+'/ALOCC_input.jpg', montage(np.array(tmp_lst_slices)[:,:,:,0]))
+
+    return lst_discriminator_v

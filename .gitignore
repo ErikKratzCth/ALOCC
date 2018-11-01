@@ -99,3 +99,12 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# added by Kratz
+dataset/
+export/
+log/
+samples/
+checkpoint
+montage.png
+.vscode/

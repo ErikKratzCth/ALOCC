@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.examples.tutorials.mnist import input_data
+#from tensorflow.examples.tutorials.mnist import input_data
 from utils import pp, visualize, to_json, show_all_variables
 from models import ALOCC_Model
 import matplotlib.pyplot as plt
@@ -9,14 +9,17 @@ import scipy.misc
 from utils import *
 import time
 import os
+from sklearn.metrics import roc_auc_score, average_precision_score
+import math
 
 flags = tf.app.flags
+flags.DEFINE_integer("nStride",1,"nStride ?[1]")
 flags.DEFINE_integer("epoch", 1, "Epoch to train [25]")
 flags.DEFINE_float("learning_rate", 0, "Learning rate of for adam [0.0002]")
 flags.DEFINE_float("beta1", 0.5, "Momentum term of adam [0.5]")
 flags.DEFINE_integer("attention_label", 1, "Conditioned label that growth attention of training label [1]")
 flags.DEFINE_float("r_alpha", 0.2, "Refinement parameter [0.2]")
-flags.DEFINE_integer("train_size", np.inf, "The size of train images [np.inf]")
+flags.DEFINE_integer("train_size", 5000, "The size of train images [np.inf]")
 flags.DEFINE_integer("batch_size", 128, "The size of batch images [64]")
 flags.DEFINE_integer("input_height", 45, "The size of image to use. [45]")
 flags.DEFINE_integer("input_width", None, "The size of image to use. If None, same value as input_height [None]")
@@ -48,7 +51,7 @@ def check_some_assertions():
 
 def main(_):
     print('Program is started at', time.clock())
-    pp.pprint(flags.FLAGS.__flags)
+#    pp.pprint(flags.FLAGS.__flags) # print all flags, suppress to unclutter output
 
     n_per_itr_print_results = 100
     n_fetch_data = 10
@@ -63,16 +66,16 @@ def main(_):
     lst_test_dirs = ['Test004','Test005','Test006']
 
     #DATASET PARAMETER : MNIST
-    #FLAGS.dataset = 'mnist'
-    #FLAGS.dataset_address = './dataset/mnist'
-    #nd_input_frame_size = (28, 28)
-    #nd_patch_size = (28, 28)
-    #FLAGS.checkpoint_dir = "./checkpoint/mnist_128_28_28/"
+    FLAGS.dataset = 'mnist'
+    FLAGS.dataset_address = './dataset/mnist'
+    nd_input_frame_size = (28, 28)
+    nd_patch_size = (28, 28)
+    FLAGS.checkpoint_dir = "./checkpoint/mnist_128_28_28/"
 
-    #FLAGS.input_width = nd_patch_size[0]
-    #FLAGS.input_height = nd_patch_size[1]
-    #FLAGS.output_width = nd_patch_size[0]
-    #FLAGS.output_height = nd_patch_size[1]
+    FLAGS.input_width = nd_patch_size[0]
+    FLAGS.input_height = nd_patch_size[1]
+    FLAGS.output_width = nd_patch_size[0]
+    FLAGS.output_height = nd_patch_size[1]
 
 
     check_some_assertions()
@@ -83,7 +86,7 @@ def main(_):
     #FLAGS.input_fname_pattern = '*'
     FLAGS.train = False
     FLAGS.epoch = 1
-    FLAGS.batch_size = 504
+    FLAGS.batch_size = 64
 
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
@@ -113,7 +116,7 @@ def main(_):
                     nd_input_frame_size = nd_input_frame_size,
                     n_fetch_data=n_fetch_data)
 
-        show_all_variables()
+#        show_all_variables()
 
 
         print('--------------------------------------------------')
@@ -121,19 +124,50 @@ def main(_):
         tmp_ALOCC_model.f_check_checkpoint()
 
         if FLAGS.dataset=='mnist':
-            mnist = input_data.read_data_sets(FLAGS.dataset_address)
+            #mnist = input_data.read_data_sets(FLAGS.dataset_address)
+            mnist = tf.keras.datasets.mnist
+            (x_train, y_train),(x_test, y_test) = mnist.load_data() 
 
-            specific_idx_anomaly = np.where(mnist.train.labels != 6)[0]
-            specific_idx = np.where(mnist.train.labels == 6)[0]
-            ten_precent_anomaly = [specific_idx_anomaly[x] for x in
-                                   random.sample(range(0, len(specific_idx_anomaly)), len(specific_idx) // 40)]
+            inlier_idx = tmp_ALOCC_model.attention_label
+            specific_idx = np.where(y_test == inlier_idx)[0]
+            inlier_data = x_test[specific_idx].reshape(-1, 28, 28, 1)
 
-            data = mnist.train.images[specific_idx].reshape(-1, 28, 28, 1)
-            tmp_data = mnist.train.images[ten_precent_anomaly].reshape(-1, 28, 28, 1)
-            data = np.append(data, tmp_data).reshape(-1, 28, 28, 1)
 
-            lst_prob = tmp_ALOCC_model.f_test_frozen_model(data[0:FLAGS.batch_size])
-            print('check is ok')
+            anomaly_frac = 0.1
+            potential_idx_anomaly = np.where(y_test != inlier_idx)[0]
+            specific_idx_anomaly = [potential_idx_anomaly[x] for x in
+                                   random.sample(range(0, len(potential_idx_anomaly)), math.ceil(anomaly_frac*len(specific_idx)/(1-anomaly_frac)))]
+
+            anomaly_data = x_test[specific_idx_anomaly].reshape(-1, 28, 28, 1)
+            data = np.append(inlier_data, anomaly_data).reshape(-1, 28, 28, 1)
+
+            # True labels are 1 for inliers and 0 for anomalies, since discriminator outputs higher values for inliers
+            labels = np.append(np.ones(len(inlier_data)),np.zeros(len(anomaly_data)))
+
+            # Shuffle data so not only anomaly points are removed if data is shortened below
+            tmp_perm = np.random.permutation(len(data))
+            data = data[tmp_perm]
+            labels = labels[tmp_perm]
+
+            # Only whole batches
+            n_batches = len(data)//tmp_ALOCC_model.batch_size
+#            print("Batch size: ", tmp_ALOCC_model.batch_size, "n batches: ", n_batches)
+            data = data[:n_batches*tmp_ALOCC_model.batch_size]
+            labels = labels[:len(data)]
+
+            # Get test results from discriminator
+            results_d = tmp_ALOCC_model.f_test_frozen_model(data)
+
+            # Compute performance metrics
+            print("Results:", len(results_d), "labels: ", labels.shape)
+
+            roc_auc = roc_auc_score(labels, results_d)
+            print('AUROC: ',roc_auc)
+
+            roc_prc = average_precision_score(labels, results_d)
+            print("AUPRC: ", roc_prc)
+
+            print('test completed')
             exit()
             #generated_data = tmp_ALOCC_model.feed2generator(data[0:FLAGS.batch_size])
 

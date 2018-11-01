@@ -1,0 +1,30 @@
+TODO-list to add implementation for BDD100K dataset:
+
+models.py
+	Line 108: 
+		add "if self.dataset_name == 'bdd100k':" section with
+		construction, i.e. image sizes, channels, data
+
+	Line 181:
+		add option for exporting sample input images
+
+	Line 206:
+		add option for loading self.data
+
+	Line 218:
+		add option for setting batchsize
+
+	Line 240:
+		potentially add option for bdd100k
+
+	Line 331:
+		add deeper architecture for discriminator
+
+	Line 346:
+        add deeper architecture for generator
+
+	Line 373:
+        add deeper architecture for sampler
+	
+
+
