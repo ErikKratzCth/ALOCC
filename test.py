@@ -86,7 +86,6 @@ def main(_):
     #FLAGS.input_fname_pattern = '*'
     FLAGS.train = False
     FLAGS.epoch = 1
-    FLAGS.batch_size = 16
 
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
