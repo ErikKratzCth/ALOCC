@@ -9,7 +9,8 @@ import scipy.misc
 from utils import *
 import time
 import os
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, average_precision_score
+import math
 
 flags = tf.app.flags
 flags.DEFINE_integer("nStride",1,"nStride ?[1]")
@@ -50,7 +51,7 @@ def check_some_assertions():
 
 def main(_):
     print('Program is started at', time.clock())
-    pp.pprint(flags.FLAGS.__flags)
+#    pp.pprint(flags.FLAGS.__flags) # print all flags, suppress to unclutter output
 
     n_per_itr_print_results = 100
     n_fetch_data = 10
@@ -85,7 +86,7 @@ def main(_):
     #FLAGS.input_fname_pattern = '*'
     FLAGS.train = False
     FLAGS.epoch = 1
-    FLAGS.batch_size = 504
+    FLAGS.batch_size = 64
 
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
@@ -115,7 +116,7 @@ def main(_):
                     nd_input_frame_size = nd_input_frame_size,
                     n_fetch_data=n_fetch_data)
 
-        show_all_variables()
+#        show_all_variables()
 
 
         print('--------------------------------------------------')
@@ -126,29 +127,45 @@ def main(_):
             #mnist = input_data.read_data_sets(FLAGS.dataset_address)
             mnist = tf.keras.datasets.mnist
             (x_train, y_train),(x_test, y_test) = mnist.load_data() 
-            
-            inlier_idx = 6
-            specific_idx_anomaly = np.where(y_test != inlier_idx)[0]
-            specific_idx = np.where(y_test == inlier_idx)[0]
-            ten_precent_anomaly = [specific_idx_anomaly[x] for x in
-                                   random.sample(range(0, len(specific_idx_anomaly)), len(specific_idx) // 40)]
 
+            inlier_idx = tmp_ALOCC_model.attention_label
+            specific_idx = np.where(y_test == inlier_idx)[0]
             inlier_data = x_test[specific_idx].reshape(-1, 28, 28, 1)
-            anomaly_data = x_test[ten_precent_anomaly].reshape(-1, 28, 28, 1)
+
+
+            anomaly_frac = 0.1
+            potential_idx_anomaly = np.where(y_test != inlier_idx)[0]
+            specific_idx_anomaly = [potential_idx_anomaly[x] for x in
+                                   random.sample(range(0, len(potential_idx_anomaly)), math.ceil(anomaly_frac*len(specific_idx)/(1-anomaly_frac)))]
+
+            anomaly_data = x_test[specific_idx_anomaly].reshape(-1, 28, 28, 1)
             data = np.append(inlier_data, anomaly_data).reshape(-1, 28, 28, 1)
-            labels = np.append(np.zeros(len(inlier_data)),np.ones(len(anomaly_data)))
+
+            # True labels are 1 for inliers and 0 for anomalies, since discriminator outputs higher values for inliers
+            labels = np.append(np.ones(len(inlier_data)),np.zeros(len(anomaly_data)))
+
+            # Shuffle data so not only anomaly points are removed if data is shortened below
+            tmp_perm = np.random.permutation(len(data))
+            data = data[tmp_perm]
+            labels = labels[tmp_perm]
 
             # Only whole batches
             n_batches = len(data)//tmp_ALOCC_model.batch_size
+#            print("Batch size: ", tmp_ALOCC_model.batch_size, "n batches: ", n_batches)
             data = data[:n_batches*tmp_ALOCC_model.batch_size]
             labels = labels[:len(data)]
-            
+
             # Get test results from discriminator
-            results_d, _ = tmp_ALOCC_model.f_test_frozen_model(data)
-            
+            results_d = tmp_ALOCC_model.f_test_frozen_model(data)
+
             # Compute performance metrics
+            print("Results:", len(results_d), "labels: ", labels.shape)
+
             roc_auc = roc_auc_score(labels, results_d)
-            print('AUC: ',roc_auc)       
+            print('AUROC: ',roc_auc)
+
+            roc_prc = average_precision_score(labels, results_d)
+            print("AUPRC: ", roc_prc)
 
             print('test completed')
             exit()

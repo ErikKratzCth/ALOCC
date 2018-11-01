@@ -101,9 +101,11 @@ class ALOCC_Model(object):
       #mnist = input_data.read_data_sets(self.dataset_address)
       (x_train, y_train),(x_test, y_test) = mnist.load_data()
       specific_idx = np.where(y_train == self.attention_label)[0]
+      print("Inlier digit: ", self.attention_label)
       self.data = x_train[specific_idx].reshape(-1, 28, 28, 1)
       self.c_dim = 1
-      
+      print("Training data length: ", len(self.data))
+
     elif self.dataset_name == 'UCSD':
       self.nStride = n_stride
       self.patch_size = nd_patch_size
@@ -627,12 +629,13 @@ class ALOCC_Model(object):
 
         lst_discriminator_v.extend(results_d)
         lst_generated_img.extend(results_g)
-        print('finish pp ... {}/{}'.format(i,batch_idxs))
+        print('Tested batch {}/{}'.format(i+1,batch_idxs))
 
-    return results_d, results_g
     #f = plt.figure()
     #plt.plot(np.array(lst_discriminator_v))
     #f.savefig('samples/d_values.jpg')
 
     scipy.misc.imsave('./'+self.sample_dir+'/ALOCC_generated.jpg', montage(np.array(lst_generated_img)[:,:,:,0]))
     scipy.misc.imsave('./'+self.sample_dir+'/ALOCC_input.jpg', montage(np.array(tmp_lst_slices)[:,:,:,0]))
+
+    return lst_discriminator_v
