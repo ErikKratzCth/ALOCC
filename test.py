@@ -9,6 +9,7 @@ import scipy.misc
 from utils import *
 import time
 import os
+from sklearn.metrics import roc_auc_score
 
 flags = tf.app.flags
 flags.DEFINE_integer("nStride",1,"nStride ?[1]")
@@ -126,18 +127,30 @@ def main(_):
             mnist = tf.keras.datasets.mnist
             (x_train, y_train),(x_test, y_test) = mnist.load_data() 
             
-            specific_idx_anomaly = np.where(y_train != 6)[0]
-            specific_idx = np.where(y_train == 6)[0]
+            inlier_idx = 6
+            specific_idx_anomaly = np.where(y_test != inlier_idx)[0]
+            specific_idx = np.where(y_test == inlier_idx)[0]
             ten_precent_anomaly = [specific_idx_anomaly[x] for x in
                                    random.sample(range(0, len(specific_idx_anomaly)), len(specific_idx) // 40)]
 
-            data = x_train[specific_idx].reshape(-1, 28, 28, 1)
-            tmp_data = x_train[ten_precent_anomaly].reshape(-1, 28, 28, 1)
-            data = np.append(data, tmp_data).reshape(-1, 28, 28, 1)
+            inlier_data = x_test[specific_idx].reshape(-1, 28, 28, 1)
+            anomaly_data = x_test[ten_precent_anomaly].reshape(-1, 28, 28, 1)
+            data = np.append(inlier_data, anomaly_data).reshape(-1, 28, 28, 1)
+            labels = np.append(np.zeros(len(inlier_data)),np.ones(len(anomaly_data)))
 
-            results_d, _ = tmp_ALOCC_model.f_test_frozen_model(data[0:FLAGS.batch_size])
+            # Only whole batches
+            n_batches = len(data)//tmp_ALOCC_model.batch_size
+            data = data[:n_batches*tmp_ALOCC_model.batch_size]
+            labels = labels[:len(data)]
+            
+            # Get test results from discriminator
+            results_d, _ = tmp_ALOCC_model.f_test_frozen_model(data)
+            
+            # Compute performance metrics
+            roc_auc = roc_auc_score(labels, results_d)
+            print('AUC: ',roc_auc)       
 
-            print('check is ok')
+            print('test completed')
             exit()
             #generated_data = tmp_ALOCC_model.feed2generator(data[0:FLAGS.batch_size])
 
