@@ -13,7 +13,7 @@ from configuration import Configuration as cfg
 class ALOCC_Model(object):
   def __init__(self, sess,
                input_height=28,input_width=28, output_height=28, output_width=28,
-               batch_size=128, sample_num = 128, attention_label=1, is_training=True,
+               batch_size=32, sample_num = 32, attention_label=1, is_training=True,
                z_dim=100, gf_dim=64, df_dim=64, gfc_dim=512, dfc_dim=512, c_dim=3,
                dataset_name=None, dataset_address=None, input_fname_pattern=None,
                checkpoint_dir=None, log_dir=None, sample_dir=None, r_alpha = 0.2,
