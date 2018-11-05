@@ -13,7 +13,7 @@ from configuration import Configuration as cfg
 class ALOCC_Model(object):
   def __init__(self, sess,
                input_height=28,input_width=28, output_height=28, output_width=28,
-               batch_size=32, sample_num = 32, attention_label=1, is_training=True,
+               batch_size=128, sample_num = 32, attention_label=1, is_training=True,
                z_dim=100, gf_dim=64, df_dim=64, gfc_dim=512, dfc_dim=512, c_dim=3,
                dataset_name=None, dataset_address=None, input_fname_pattern=None,
                checkpoint_dir=None, log_dir=None, sample_dir=None, r_alpha = 0.2,
@@ -430,8 +430,8 @@ class ALOCC_Model(object):
         s_h32, s_w32 = conv_out_size_same(s_h16, 2), conv_out_size_same(s_w16, 2)
 
         # Encode
-        hae0 = lrelu(self.g_bn6(conv2d(z   , self.df_dim / 4, name='g_encoder_h0_conv')))
-        hae1 = lrelu(self.g_bn7(conv2d(hae0, self.df_dim / 2, name='g_encoder_h1_conv')))
+        hae0 = lrelu(self.g_bn6(conv2d(z   , self.df_dim // 4, name='g_encoder_h0_conv')))
+        hae1 = lrelu(self.g_bn7(conv2d(hae0, self.df_dim // 2, name='g_encoder_h1_conv')))
         hae2 = lrelu(self.g_bn8(conv2d(hae1, self.df_dim    , name='g_encoder_h2_conv')))
         hae3 = lrelu(self.g_bn9(conv2d(hae2, self.df_dim * 2, name='g_encoder_h3_conv')))
         hae4 = lrelu(self.g_bn10(conv2d(hae3, self.df_dim * 4, name='g_encoder_h4_conv')))
@@ -451,11 +451,12 @@ class ALOCC_Model(object):
         h3 = tf.nn.relu(self.g_bn3(h3))
 
         h4, self.h4_w, self.h4_b = deconv2d(
-          h3,   [self.batch_size, s_h4, s_w4,   self.c_dim   ], name='g_decoder_h4', with_w=True)
+          h3,   [self.batch_size, s_h4, s_w4,   self.gf_dim   ], name='g_decoder_h4', with_w=True)
         h4 = tf.nn.relu(self.g_bn4(h4))
-
+        #print("s_h2:",s_h2," s_w2:", s_w2, "type: ", type(s_h2))
+        #print("dim: ", self.gf_dim/2, "type: ", type(self.gf_dim/2))
         h5, self.h5_w, self.h5_b = deconv2d(
-          h4,   [self.batch_size, s_h2, s_w2,   self.gf_dim/2], name='g_decoder_h5', with_w=True)
+          h4,   [self.batch_size, s_h2, s_w2,   self.gf_dim//2], name='g_decoder_h5', with_w=True)
         h5 = tf.nn.relu(self.g_bn5(h5))
 
         h6, self.h6_w, self.h6_b = deconv2d(
@@ -507,17 +508,17 @@ class ALOCC_Model(object):
         s_h32, s_w32 = conv_out_size_same(s_h16, 2), conv_out_size_same(s_w16, 2)
 
         # Encode
-        hae0 = lrelu(self.g_bn4(conv2d(z   , self.df_dim / 4, name='g_encoder_h0_conv')))
-        hae1 = lrelu(self.g_bn5(conv2d(hae0, self.df_dim / 2, name='g_encoder_h1_conv')))
-        hae2 = lrelu(self.g_bn6(conv2d(hae1, self.df_dim    , name='g_encoder_h2_conv')))
-        hae3 = lrelu(self.g_bn7(conv2d(hae2, self.df_dim * 2, name='g_encoder_h3_conv')))
-        hae4 = lrelu(self.g_bn8(conv2d(hae3, self.df_dim * 4, name='g_encoder_h4_conv')))
-        hae5 = lrelu(self.g_bn9(conv2d(hae4, self.df_dim * 8, name='g_encoder_h5_conv')))
+        hae0 = lrelu(self.g_bn6(conv2d(z   , self.df_dim // 4, name='g_encoder_h0_conv')))
+        hae1 = lrelu(self.g_bn7(conv2d(hae0, self.df_dim // 2, name='g_encoder_h1_conv')))
+        hae2 = lrelu(self.g_bn8(conv2d(hae1, self.df_dim    , name='g_encoder_h2_conv')))
+        hae3 = lrelu(self.g_bn9(conv2d(hae2, self.df_dim * 2, name='g_encoder_h3_conv')))
+        hae4 = lrelu(self.g_bn10(conv2d(hae3, self.df_dim * 4, name='g_encoder_h4_conv')))
+        hae5 = lrelu(self.g_bn11(conv2d(hae4, self.df_dim * 8, name='g_encoder_h5_conv')))
 
         # Decode
         h1, self.h1_w, self.h1_b = deconv2d(
           hae5, [self.batch_size, s_h32, s_w32, self.gf_dim*8], name='g_decoder_h1', with_w=True)
-        h2 = tf.nn.relu(self.g_bn2(h2))
+        h1 = tf.nn.relu(self.g_bn1(h1))
 
         h2, self.h2_w, self.h2_b = deconv2d(
           h1, [self.batch_size, s_h16, s_w16, self.gf_dim*4], name='g_decoder_h2', with_w=True)
@@ -528,11 +529,11 @@ class ALOCC_Model(object):
         h3 = tf.nn.relu(self.g_bn3(h3))
 
         h4, self.h4_w, self.h4_b = deconv2d(
-          h3,   [self.batch_size, s_h4, s_w4,   self.c_dim   ], name='g_decoder_h4', with_w=True)
+          h3,   [self.batch_size, s_h4, s_w4,   self.gf_dim   ], name='g_decoder_h4', with_w=True)
         h4 = tf.nn.relu(self.g_bn4(h4))
 
         h5, self.h5_w, self.h5_b = deconv2d(
-          h4,   [self.batch_size, s_h2, s_w2,   self.gf_dim/2], name='g_decoder_h5', with_w=True)
+          h4,   [self.batch_size, s_h2, s_w2,   self.gf_dim//2], name='g_decoder_h5', with_w=True)
         h5 = tf.nn.relu(self.g_bn5(h5))
 
         h6, self.h6_w, self.h6_b = deconv2d(
