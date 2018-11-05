@@ -55,28 +55,38 @@ def main(_):
     # Manual Switchs ------------------------------------------------------------------------------
     # ---------------------------------------------------------------------------------------------
     # DATASET PARAMETER : UCSD
-    #FLAGS.dataset = 'UCSD'
-    #FLAGS.dataset_address = './dataset/UCSD_Anomaly_Dataset.v1p2/UCSDped2/Train'
+    if FLAGS.dataset == 'UCSD':
+        FLAGS.dataset_address = './dataset/UCSD_Anomaly_Dataset.v1p2/UCSDped2/Train'
 
-    # nd_input_frame_size = (240, 360)
-    #nd_slice_size = (45, 45)
-    #n_stride = 25
-    #n_fetch_data = 600
+        nd_input_frame_size = (240, 360)
+        nd_slice_size = (45, 45)
+        n_stride = 25
+        n_fetch_data = 600
+        FLAGS.input_width = nd_slice_size[0]
+        FLAGS.input_height = nd_slice_size[1]
+        FLAGS.output_width = nd_slice_size[0]
+        FLAGS.output_height = nd_slice_size[1]
+
     # ---------------------------------------------------------------------------------------------
     # # DATASET PARAMETER : MNIST
-    FLAGS.dataset = 'mnist'
-    FLAGS.dataset_address = './dataset/mnist'
-    nd_input_frame_size = (28, 28)
-    nd_slice_size = (28, 28)
-    n_stride = 1
-    n_fetch_data = 600
+    if FLAGS.dataset == 'mnist':
+        FLAGS.dataset_address = './dataset/mnist'
+        nd_input_frame_size = (28, 28)
+        nd_slice_size = (28, 28)
+        n_fetch_data = 600
+        n_stride = 1
+        FLAGS.input_width = nd_slice_size[0]
+        FLAGS.input_height = nd_slice_size[1]
+        FLAGS.output_width = nd_slice_size[0]
+        FLAGS.output_height = nd_slice_size[1]
 
+    if FLAGS.dataset == 'bdd100k':
+        nd_input_frame_size = (FLAGS.input_width, FLAGS.input_height)
+        nd_slice_size = (FLAGS.input_width, FLAGS.input_height)
+        n_stride = 1
+        n_fetch_data = None
     FLAGS.train = True
 
-    FLAGS.input_width = nd_slice_size[0]
-    FLAGS.input_height = nd_slice_size[1]
-    FLAGS.output_width = nd_slice_size[0]
-    FLAGS.output_height = nd_slice_size[1]
 
     FLAGS.sample_dir = 'export/'+FLAGS.dataset +'_%d.%d'%(nd_slice_size[0],nd_slice_size[1])
     FLAGS.input_fname_pattern = '*'
