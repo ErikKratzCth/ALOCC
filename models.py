@@ -125,8 +125,11 @@ class ALOCC_Model(object):
     elif self.dataset_name == "bdd100k":
       self.c_dim = 3
       self.dataAddress = cfg.img_folder
-      self.data, _, _, _ = load_bdd100k_data_filename_list(cfg.img_folder, cfg.norm_filenames, cfg.out_filenames, cfg.n_train, cfg.n_val, cfg.n_test, cfg.out_frac, self.input_height, self.input_width, self.c_dim, get_norm_and_out_sets=cfg.get_norm_and_out_sets, shuffle=cfg.shuffle)
-
+      if self.is_training:
+        self.data, _, _, _ = load_bdd100k_data_filename_list(cfg.img_folder, cfg.norm_filenames, cfg.out_filenames, cfg.n_train, cfg.n_val, cfg.n_test, cfg.out_frac, self.input_height, self.input_width, self.c_dim, get_norm_and_out_sets=False, shuffle=cfg.shuffle)
+      else: # load testdata
+        _ , _, self.data, self.test_labels = load_bdd100k_data_filename_list(cfg.img_folder, cfg.norm_filenames, cfg.out_filenames, cfg.n_train, cfg.n_val, cfg.n_test, cfg.out_frac, self.input_height, self.input_width, self.c_dim, get_norm_and_out_sets=False, shuffle=cfg.shuffle)
+        self.test_labels = 1 - self.test_labels
     else:
       assert('Error in loading dataset')
 

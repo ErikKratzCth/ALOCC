@@ -56,26 +56,33 @@ def main(_):
     n_per_itr_print_results = 100
     n_fetch_data = 10
     kb_work_on_patch= False
-    nd_input_frame_size = (240, 360)
-    #nd_patch_size = (45, 45)
-    n_stride = 10
-    #FLAGS.checkpoint_dir = "./checkpoint/UCSD_128_45_45/"
-
-    #FLAGS.dataset = 'UCSD'
-    #FLAGS.dataset_address = './dataset/UCSD_Anomaly_Dataset.v1p2/UCSDped2/Test'
     lst_test_dirs = ['Test004','Test005','Test006']
+    
+    n_stride = 10
+    if FLAGS.dataset == 'UCSD':
+        nd_input_frame_size = (240, 360)
+        nd_patch_size = (45, 45)
+        FLAGS.checkpoint_dir = "./checkpoint/UCSD_128_45_45/"
+        FLAGS.dataset = 'UCSD'
+        FLAGS.dataset_address = './dataset/UCSD_Anomaly_Dataset.v1p2/UCSDped2/Test'
 
     #DATASET PARAMETER : MNIST
-    FLAGS.dataset = 'mnist'
-    FLAGS.dataset_address = './dataset/mnist'
-    nd_input_frame_size = (28, 28)
-    nd_patch_size = (28, 28)
-    FLAGS.checkpoint_dir = "./checkpoint/mnist_128_28_28/"
+    if FLAGS.dataset == 'mnist':
+        FLAGS.dataset_address = './dataset/mnist'
+        nd_input_frame_size = (28, 28)
+        nd_patch_size = (28, 28)
+        FLAGS.checkpoint_dir = "./checkpoint/mnist_128_28_28/"
+        FLAGS.input_width = nd_patch_size[0]
+        FLAGS.input_height = nd_patch_size[1]
+        FLAGS.output_width = nd_patch_size[0]
+        FLAGS.output_height = nd_patch_size[1]
 
-    FLAGS.input_width = nd_patch_size[0]
-    FLAGS.input_height = nd_patch_size[1]
-    FLAGS.output_width = nd_patch_size[0]
-    FLAGS.output_height = nd_patch_size[1]
+    if FLAGS.dataset == 'bdd100k':
+        nd_input_frame_size = (FLAGS.input_height, FLAGS.input_width)
+        nd_patch_size = nd_input_frame_size
+        FLAGS.checkpoint_dir = "{}_{}_{}_{}".format(
+        FLAGS.dataset, FLAGS.batch_size,
+        FLAGS.output_height, FLAGS.output_width)
 
 
     check_some_assertions()
@@ -169,32 +176,66 @@ def main(_):
             print('test completed')
             exit()
             #generated_data = tmp_ALOCC_model.feed2generator(data[0:FLAGS.batch_size])
+        elif FLAGS.dataset == 'UCSD':
+            # else in UCDS (depends on infrustructure)
+            for s_image_dirs in sorted(glob(os.path.join(FLAGS.dataset_address, 'Test[0-9][0-9][0-9]'))):
+                tmp_lst_image_paths = []
+                if os.path.basename(s_image_dirs) not in ['Test004']:
+                print('Skip ',os.path.basename(s_image_dirs))
+                continue
+                for s_image_dir_files in sorted(glob(os.path.join(s_image_dirs + '/*'))):
+                    if os.path.basename(s_image_dir_files) not in ['068.tif']:
+                        print('Skip ', os.path.basename(s_image_dir_files))
+                        continue
+                    tmp_lst_image_paths.append(s_image_dir_files)
 
-        # else in UCDS (depends on infrustructure)
-        for s_image_dirs in sorted(glob(os.path.join(FLAGS.dataset_address, 'Test[0-9][0-9][0-9]'))):
-            tmp_lst_image_paths = []
-            if os.path.basename(s_image_dirs) not in ['Test004']:
-               print('Skip ',os.path.basename(s_image_dirs))
-               continue
-            for s_image_dir_files in sorted(glob(os.path.join(s_image_dirs + '/*'))):
-                if os.path.basename(s_image_dir_files) not in ['068.tif']:
-                    print('Skip ', os.path.basename(s_image_dir_files))
-                    continue
-                tmp_lst_image_paths.append(s_image_dir_files)
 
+                #random
+                #lst_image_paths = [tmp_lst_image_paths[x] for x in random.sample(range(0, len(tmp_lst_image_paths)), n_fetch_data)]
+                lst_image_paths = tmp_lst_image_paths
+                #images =read_lst_images(lst_image_paths,nd_patch_size,nd_patch_step,b_work_on_patch=False)
+                images = read_lst_images_w_noise2(lst_image_paths, nd_patch_size, nd_patch_step)
 
-            #random
-            #lst_image_paths = [tmp_lst_image_paths[x] for x in random.sample(range(0, len(tmp_lst_image_paths)), n_fetch_data)]
-            lst_image_paths = tmp_lst_image_paths
-            #images =read_lst_images(lst_image_paths,nd_patch_size,nd_patch_step,b_work_on_patch=False)
-            images = read_lst_images_w_noise2(lst_image_paths, nd_patch_size, nd_patch_step)
+                lst_prob = process_frame(os.path.basename(s_image_dirs),images,tmp_ALOCC_model)
 
-            lst_prob = process_frame(os.path.basename(s_image_dirs),images,tmp_ALOCC_model)
+                print('pseudocode test is finished')
 
-            print('pseudocode test is finished')
+                # This code for just check output for readers
+                # ...
+        
+        elif FLAGS.dataset == 'bdd100k':
+            data = self.data
+            labels = self.labels
 
-            # This code for just check output for readers
-            # ...
+        # Below is done for all datasets
+        # True labels are 1 for inliers and 0 for anomalies, since discriminator outputs higher values for inliers
+
+        # Shuffle data so not only anomaly points are removed if data is shortened below
+        tmp_perm = np.random.permutation(len(data))
+        data = data[tmp_perm]
+        labels = labels[tmp_perm]
+
+        # Only whole batches
+        n_batches = len(data)//tmp_ALOCC_model.batch_size
+#            print("Batch size: ", tmp_ALOCC_model.batch_size, "n batches: ", n_batches)
+        data = data[:n_batches*tmp_ALOCC_model.batch_size]
+        labels = labels[:len(data)]
+
+        # Get test results from discriminator
+        results_d = tmp_ALOCC_model.f_test_frozen_model(data)
+
+        # Compute performance metrics
+        print("Results:", len(results_d), "labels: ", labels.shape)
+
+        roc_auc = roc_auc_score(labels, results_d)
+        print('AUROC: ',roc_auc)
+
+        roc_prc = average_precision_score(labels, results_d)
+        print("AUPRC: ", roc_prc)
+
+        print('test completed')
+        exit()
+        #generated_data = tmp_ALOCC_model.feed2generator(data[0:FLAGS.batch_size])
 
 def process_frame(s_name,frames_src,sess):
     nd_patch,nd_location = get_image_patches(frames_src,sess.patch_size,sess.patch_step)
