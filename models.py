@@ -240,7 +240,7 @@ class ALOCC_Model(object):
       sample_w_noise = get_noisy_data(self.data)
 
     for epoch in xrange(config.epoch):
-      print('Epoch ({}/{})-------------------------------------------------'.format(epoch,config.epoch))
+      print('Epoch ({}/{})-------------------------------------------------'.format(epoch+1,config.epoch))
       if config.dataset == 'mnist':
         batch_idxs = min(len(self.data), config.train_size) // config.batch_size
       elif config.dataset == 'UCSD':
@@ -309,7 +309,7 @@ class ALOCC_Model(object):
 
         counter += 1
 
-        msg = "Epoch:[%2d][%4d/%4d]--> d_loss: %.8f, g_loss: %.8f" % (epoch, idx, batch_idxs, errD_fake+errD_real, errG)
+        msg = "Epoch:[%2d][%4d/%4d]--> d_loss: %.8f, g_loss: %.8f" % (epoch+1, idx+1, batch_idxs, errD_fake+errD_real, errG)
         print(msg)
         logging.info(msg)
 
