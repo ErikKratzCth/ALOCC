@@ -80,7 +80,7 @@ def main(_):
     if FLAGS.dataset == 'bdd100k':
         nd_input_frame_size = (FLAGS.input_height, FLAGS.input_width)
         nd_patch_size = nd_input_frame_size
-        FLAGS.checkpoint_dir = "{}_{}_{}_{}".format(
+        FLAGS.checkpoint_dir = "checkpoint/{}_{}_{}_{}".format(
         FLAGS.dataset, FLAGS.batch_size,
         FLAGS.output_height, FLAGS.output_width)
 
@@ -126,7 +126,7 @@ def main(_):
 
 
         print('--------------------------------------------------')
-        print('Load Pretrained Model...')
+        print('Loading pretrained model from ',tmp_ALOCC_model.checkpoint_dir,'...')
         tmp_ALOCC_model.f_check_checkpoint()
 
         if FLAGS.dataset=='mnist':
@@ -165,15 +165,13 @@ def main(_):
             results_d = tmp_ALOCC_model.f_test_frozen_model(data)
 
             # Compute performance metrics
-            print("Results:", len(results_d), "labels: ", labels.shape)
-
             roc_auc = roc_auc_score(labels, results_d)
             print('AUROC: ',roc_auc)
 
             roc_prc = average_precision_score(labels, results_d)
             print("AUPRC: ", roc_prc)
 
-            print('test completed')
+            print('Test completed')
             exit()
             #generated_data = tmp_ALOCC_model.feed2generator(data[0:FLAGS.batch_size])
         elif FLAGS.dataset == 'UCSD':
@@ -181,8 +179,8 @@ def main(_):
             for s_image_dirs in sorted(glob(os.path.join(FLAGS.dataset_address, 'Test[0-9][0-9][0-9]'))):
                 tmp_lst_image_paths = []
                 if os.path.basename(s_image_dirs) not in ['Test004']:
-                print('Skip ',os.path.basename(s_image_dirs))
-                continue
+                    print('Skip ',os.path.basename(s_image_dirs))
+                    continue
                 for s_image_dir_files in sorted(glob(os.path.join(s_image_dirs + '/*'))):
                     if os.path.basename(s_image_dir_files) not in ['068.tif']:
                         print('Skip ', os.path.basename(s_image_dir_files))
@@ -204,11 +202,12 @@ def main(_):
                 # ...
         
         elif FLAGS.dataset == 'bdd100k':
-            data = self.data
-            labels = self.labels
+            data = tmp_ALOCC_model.data
+            labels = tmp_ALOCC_model.test_labels
 
         # Below is done for all datasets
-        # True labels are 1 for inliers and 0 for anomalies, since discriminator outputs higher values for inliers
+       
+        # True labels are 1 for inliers and 0 for anomalies, since the discriminator is trained for this
 
         # Shuffle data so not only anomaly points are removed if data is shortened below
         tmp_perm = np.random.permutation(len(data))
@@ -225,15 +224,13 @@ def main(_):
         results_d = tmp_ALOCC_model.f_test_frozen_model(data)
 
         # Compute performance metrics
-        print("Results:", len(results_d), "labels: ", labels.shape)
-
         roc_auc = roc_auc_score(labels, results_d)
         print('AUROC: ',roc_auc)
 
         roc_prc = average_precision_score(labels, results_d)
         print("AUPRC: ", roc_prc)
 
-        print('test completed')
+        print('Test completed')
         exit()
         #generated_data = tmp_ALOCC_model.feed2generator(data[0:FLAGS.batch_size])
 

@@ -598,7 +598,7 @@ class ALOCC_Model(object):
       could_load = True
       checkpoint_counter = counter
     else:
-      print(" [*] Failed to find a checkpoint")
+      print(" [*] Failed to find a checkpoint at specified location: ", self.checkpoint_dir)
       could_load = False
       checkpoint_counter =0
 
