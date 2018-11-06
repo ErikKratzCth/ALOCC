@@ -253,7 +253,7 @@ class ALOCC_Model(object):
 
       # for detecting valuable epoch that we must stop training step
       # sample_input_for_test_each_train_step.npy
-      sample_test = np.load('SIFTETS.npy').reshape([504,45,45,1])[0:128]
+#      sample_test = np.load('SIFTETS.npy').reshape([self.batch_size,self.input_height,self.input_width,self.c_dim])[0:self.batch_size]
 
       for idx in xrange(0, batch_idxs):
         if config.dataset == 'mnist':
@@ -316,6 +316,7 @@ class ALOCC_Model(object):
         print(msg)
         logging.info(msg)
 
+        '''
         if np.mod(counter, self.n_per_itr_print_results) == 0:
           if config.dataset == 'mnist':
             samples, d_loss, g_loss = self.sess.run(
@@ -358,6 +359,7 @@ class ALOCC_Model(object):
               msg = "[Sample] d_loss: %.8f, g_loss: %.8f" % (d_loss, g_loss)
               print(msg)
               logging.info(msg)
+              '''
 
       self.save(config.checkpoint_dir, epoch)
 

@@ -23,6 +23,10 @@ flags.DEFINE_string("checkpoint_dir", "checkpoint", "Directory name to save the 
 flags.DEFINE_string("log_dir", "log", "Directory name to save the log [log]")
 flags.DEFINE_string("sample_dir", "samples", "Directory name to save the image samples [samples]")
 flags.DEFINE_boolean("train", True, "True for training, False for testing [False]")
+flags.DEFINE_integer("z_dim", 100, "Size of latent representation [100]")
+flags.DEFINE_integer("gf_dim", 64, "Parameter for num filters in generator [64]")
+flags.DEFINE_integer("df_dim", 64, "Parameter for num filters in discriminator [64]")
+
 FLAGS = flags.FLAGS
 
 
@@ -121,7 +125,11 @@ def main(_):
                     n_per_itr_print_results=n_per_itr_print_results,
                     kb_work_on_patch=kb_work_on_patch,
                     nd_input_frame_size = nd_input_frame_size,
-                    n_fetch_data=n_fetch_data)
+                    n_fetch_data=n_fetch_data,
+                    z_dim=FLAGS.z_dim,
+                    gf_dim=FLAGS.gf_dim,
+                    df_dim=FLAGS.df_dim
+                    )
 
         #show_all_variables()
 
