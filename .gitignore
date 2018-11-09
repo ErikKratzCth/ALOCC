@@ -102,9 +102,9 @@ ENV/
 
 # added by Kratz
 dataset/
-export/
-log/
-samples/
+#export/
+#log/
+#samples/
 checkpoint
-montage.png
+#montage.png
 .vscode/
