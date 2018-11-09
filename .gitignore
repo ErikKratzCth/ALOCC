@@ -103,7 +103,7 @@ ENV/
 # added by Kratz
 dataset/
 #export/
-#log/
+log/
 #samples/
 checkpoint
 #montage.png
