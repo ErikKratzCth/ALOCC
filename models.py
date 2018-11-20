@@ -9,6 +9,7 @@ import logging
 import matplotlib.pyplot as plt
 from loadbdd100k import load_bdd100k_data_attribute_spec, load_bdd100k_data_filename_list
 from configuration import Configuration as cfg
+from keras.preprocessing.image import load_img, img_to_array
 
 class ALOCC_Model(object):
   def __init__(self, sess,
@@ -87,6 +88,8 @@ class ALOCC_Model(object):
     self.g_bn10 = batch_norm(name='g_bn10')
     self.g_bn11 = batch_norm(name='g_bn11')
 
+    self.g_bn = batch_norm(name = 'general_generator_bn')
+
     self.dataset_name = dataset_name
     self.dataset_address= dataset_address
     self.input_fname_pattern = input_fname_pattern
@@ -130,6 +133,24 @@ class ALOCC_Model(object):
       else: # load testdata
         _ , _, self.data, self.test_labels = load_bdd100k_data_filename_list(cfg.img_folder, cfg.norm_filenames, cfg.out_filenames, cfg.n_train, cfg.n_val, cfg.n_test, cfg.out_frac, self.input_height, self.input_width, self.c_dim, get_norm_and_out_sets=False, shuffle=cfg.shuffle)
         self.test_labels = 1 - self.test_labels
+    elif self.dataset_name in ("dreyeve", "prosivic"):
+      # Load data
+      self.c_dim = 3
+      self.dataAdress = None
+
+      if self.is_training:
+        self.data = [img_to_array(load_img(Cfg.train_folder + filename)) for filename in os.listdir(Cfg.train_folder)][:n_train]
+        # self._X_val = [img_to_array(load_img(Cfg.prosivic_val_folder + filename)) for filename in os.listdir(Cfg.prosivic_val_folder)][:Cfg.prosivic_n_val] 
+      else: #load test data     
+      n_test_out = Cfg.prosivic_n_test - Cfg.prosivic_n_test_in
+      _X_test_in = [img_to_array(load_img(Cfg.prosivic_test_in_folder + filename)) for filename in os.listdir(Cfg.prosivic_test_in_folder)][:Cfg.prosivic_n_test_in]
+      _X_test_out = [img_to_array(load_img(Cfg.prosivic_test_out_folder + filename)) for filename in os.listdir(Cfg.prosivic_test_out_folder)][:n_test_out]
+      _y_test_in  = np.ones((Cfg.prosivic_n_test_in,),dtype=np.int32)
+      _y_test_out = np.zeros((n_test_out,),dtype=np.int32)
+      self.data = np.concatenate([_X_test_in, _X_test_out])
+      self.test_labels = np.concatenate([_y_test_in, _y_test_out])
+      # self.out_frac = Cfg.out_frac
+
     else:
       assert('Error in loading dataset')
 
@@ -239,7 +260,7 @@ class ALOCC_Model(object):
       sample = np.array(sample).reshape(-1, self.patch_size[0], self.patch_size[1], 1)
       sample_w_noise,_ = read_lst_images_w_noise(sample_files, self.patch_size, self.patch_step)
       sample_w_noise = np.array(sample_w_noise).reshape(-1, self.patch_size[0], self.patch_size[1], 1)
-    if config.dataset == 'bdd100k':
+    if config.dataset in ('bdd100k','dreyeve','prosivic'):
       sample_w_noise = get_noisy_data(self.data)
 
     for epoch in xrange(config.epoch):
@@ -391,6 +412,71 @@ class ALOCC_Model(object):
         h8 = tf.nn.sigmoid(h7,name='d_output')
 
         return h8, h7
+      
+      elif self.dataset_name in ("prosivic", "dreyeve"):
+        tmp = cfg.architecture.split("_")
+        use_pool = int(tmp[0]) == 1 # 1 or 0
+        n_conv = int(tmp[1])
+        n_dense = int(tmp[2])
+        c_in = int(tmp[3])
+        zsize = int(tmp[4])
+        ksize= int(tmp[5])
+        stride = int(tmp[6])
+        pad = int(tmp[7])
+        num_filters = c_in
+
+        if use_pool:
+          # Compute output padding and padding so that output size is same as input for deconv-layers
+          if stride != 1:
+            print("Warning: stride not 1 while using pooling. Algorithm is not built to support this")
+          else:
+            outpad = (ksize-stride)%2
+          pad = (ksize-stride+outpad)//2
+        else: # using stride to increase image size: set pad and outpad so that h_out = stride * h_in
+          if stride == 1:
+            print("No pool and stride = 1. Image size will not increase")
+          else:
+            outpad = (ksize-stride)%2
+            pad = (ksize-stride+outpad)//2
+
+        # pad = (pad,pad) # needs to be specified for both dimensions
+
+        x = image
+        # Do first n_conv-1 conv layers (last one might be different)
+        for i in range(n_conv-1):
+          x = conv2d(x, num_filters, k_h=ksize, k_w=ksize, d_h=stride, d_w=stride, pad = pad, name="d_conv2d_"+str(i+1))
+          print("x: ",x.shape)
+          if cfg.use_batchnorm:
+            bn = batch_norm(name = 'g_bn_'+str(i+1))
+            x = bn(x)
+          if use_pool:
+            x = pool(x)
+          x = lrelu(x)
+          num_filters *= 2
+
+        if n_dense > 0:
+          # Add one more convlayer as above
+          x = conv2d(x, num_filters, k_h=ksize, k_w=ksize, d_h=stride, d_w=stride, pad = pad, name="d_conv2d_"+str(n_conv-1))
+          print("x: ",x.shape)
+          if cfg.use_batchnorm:
+            bn = batch_norm(name="g_bn_"+str(n_conv-1))
+            x = bn(x)
+          if use_pool:
+            x = pool(x)
+          x = lrelu(x)
+          num_filters *= 2 # TODO: Remove this?
+
+          print("into dense: ", x.shape)
+          x = linear(tf.reshape(h6, [self.batch_size, -1]), 1, 'd_lin')
+
+        else:
+          # Final conv-layer is different
+            h = cfg.image_height // (2**(n_conv-1))
+            x = conv2d(x, num_filters, k_h=h, k_w=h, d_h=1, d_w=1, name= 'd_conv2d_encode', pad = 0)
+          
+        return tf.nn.sigmoid(x,name='d_output')
+
+
 
   # =========================================================================================================
   def generator(self, z):
@@ -406,22 +492,26 @@ class ALOCC_Model(object):
         s_h16, s_w16 = conv_out_size_same(s_h8, 2), conv_out_size_same(s_w8, 2)
 
         # Encode
+        print("Input shape: ", z.shape)
         hae0 = lrelu(self.g_bn4(conv2d(z   , self.df_dim * 2, name='g_encoder_h0_conv')))
+        print("x: ", hae0.shape)
         hae1 = lrelu(self.g_bn5(conv2d(hae0, self.df_dim * 4, name='g_encoder_h1_conv')))
+        print("x: ", hae1.shape)
         hae2 = lrelu(self.g_bn6(conv2d(hae1, self.df_dim * 8, name='g_encoder_h2_conv')))
+        print("x: ", hae2.shape)
 
         # Decode
         h2, self.h2_w, self.h2_b = deconv2d(
           hae2, [self.batch_size, s_h4, s_w4, self.gf_dim * 2], name='g_decoder_h1', with_w=True)
         h2 = tf.nn.relu(self.g_bn2(h2))
-
+        print("x: ", h2.shape)
         h3, self.h3_w, self.h3_b = deconv2d(
           h2, [self.batch_size, s_h2, s_w2, self.gf_dim * 1], name='g_decoder_h0', with_w=True)
         h3 = tf.nn.relu(self.g_bn3(h3))
-
+        print("x: ", h3.shape)
         h4, self.h4_w, self.h4_b = deconv2d(
           h3, [self.batch_size, s_h, s_w, self.c_dim], name='g_decoder_h00', with_w=True)
-
+        print("x: ", h4.shape)
         return tf.nn.tanh(h4,name='g_output')
 
       elif self.dataset_name == 'bdd100k':
@@ -468,6 +558,123 @@ class ALOCC_Model(object):
           h5,   [self.batch_size, s_h, s_w,     self.c_dim],    name='g_decoder_h6', with_w=True)
 
         return tf.nn.tanh(h6,name='g_output')
+
+      elif self.dataset_name in ("prosivic", "dreyeve"):
+        tmp = cfg.architecture.split("_")
+        use_pool = int(tmp[0]) == 1 # 1 or 0
+        n_conv = int(tmp[1])
+        n_dense = int(tmp[2])
+        c_out = int(tmp[3])
+        zsize = int(tmp[4])
+        ksize= int(tmp[5])
+        stride = int(tmp[6])
+        pad = int(tmp[7])
+        num_filters = c_out
+
+        if use_pool:
+          # Compute output padding and padding so that output size is same as input for deconv-layers
+          if stride != 1:
+            print("Warning: stride not 1 while using pooling. Algorithm is not built to support this")
+          else:
+            outpad = (ksize-stride)%2
+          pad = (ksize-stride+outpad)//2
+        else: # using stride to increase image size: set pad and outpad so that h_out = stride * h_in
+          if stride == 1:
+            print("No pool and stride = 1. Image size will not increase")
+          else:
+            outpad = (ksize-stride)%2
+            pad = (ksize-stride+outpad)//2
+
+        # pad = (pad,pad) # needs to be specified for both dimensions
+
+        # Encode
+        x = z
+        # Do first n_conv-1 conv layers (last one might be different)
+        for i in range(n_conv-1):
+          x = conv2d(x, num_filters, k_h=ksize, k_w=ksize, d_h=stride, d_w=stride, pad = pad, name="g_conv2d_"+str(i+1))
+          print("x: ",x.shape)
+          if cfg.use_batchnorm:
+            bn = batch_norm(name = 'g_bn_'+str(i+1))
+            x = bn(x)
+          if use_pool:
+            x = pool(x)
+          x = lrelu(x)
+          num_filters *= 2
+
+        if n_dense > 0:
+          # Add one more convlayer as above
+          x = conv2d(x, num_filters, k_h=ksize, k_w=ksize, d_h=stride, d_w=stride, pad = pad, name="g_conv2d_"+str(n_conv-1))
+          print("x: ",x.shape)
+          if cfg.use_batchnorm:
+            bn = batch_norm(name="g_bn_"+str(n_conv-1))
+            x = bn(x)
+          if use_pool:
+            x = pool(x)
+          x = lrelu(x)
+          num_filters *= 2 # TODO: Remove this?
+
+          linear(tf.reshape(h6, [self.batch_size, -1]), zsize, 'g_lin_encode')
+
+        else:
+          # Final conv-layer is different
+            h = cfg.image_height // (2**(n_conv-1))
+            encoded = conv2d(x, num_filters, k_h=h, k_w=h, d_h=1, d_w=1, name="g_conv2d_encode", pad = 0)
+          
+        print("Encoded: ", encoded.shape)
+      
+        # Decode
+
+        if n_dense > 0:
+          h1 = self.image_height // (2**n_conv) # height = width of image going into first conv layer
+          num_filters =  c_out * (2**(n_conv-1))
+          n_dense_out = h1**2 * num_filters
+          x = linear(tf.reshape(encoded,[self.batch_size,-1]),num_filters, name = 'g_lin_decode')
+          # x = x.permute(0,3,1,2)
+
+          x = tf.reshape(x,[self.batch_size,h1,h1,num_filters]
+          x = F.relu(x)
+          num_filters //= 2
+
+          if use_pool:
+            x = upscale(x)
+          # First deconv-layer (identical to rest, add here just to get right number of layers)
+          h = h1*2
+          output_shape = [self.batch_size, h, h, num_filters]
+          x = deconv2d(x,output_shape, k_h = ksize, k_w = ksize, d_h = stride, d_w = stride,name = 'g_deconv2d_1')
+        
+        else: # No dense layer, upscale to correct shape with unique first deconv-layer
+          x = encoded
+          h2 = self.image_height // (2**(n_conv-1)) # height of image going in to second deconv layer
+          num_filters = c_out * (2**(n_conv-2))
+          h = h2
+          output_shape = [self.batch_size, h, h, num_filters]
+          x = deconv2d(x, output_shape,  k_h = h, k_w = h, d_h = 1, d_w = 1, name = 'g_deconv2d_1')
+          bn = batch_norm(name = 'g_bn_d_1')
+          x = lrelu(bn(x))
+          
+        output_shape[1] *= 2
+        output_shape[2] *= 2
+        output_shape[3] //=2
+
+        for i in range(n_conv - 2): # Add all but last conv layer
+          if use_pool:
+            x = upscale(x)
+
+          bn = batch_norm(name = 'g_bn_d_'+str(i+2))  
+          x = lrelu(bn(deconv2d(x, output_shape,  k_h = ksize, k_w = ksize, d_h = stride, d_w = stride, name = 'g_deconv2d_'+str(i+2))))
+
+          output_shape[1] *= 2
+          output_shape[2] *= 2
+          output_shape[3] //=2
+
+        if use_pool:
+          x = upscale(x)
+
+        x = deconv2d(x, output_shape,  k_h = ksize, k_w = ksize, d_h = stride, d_w = stride, name = 'g_deconv2d_reconstruct')
+
+        x = tf.nn.tanh(self.output_layer(x), name = 'g_output')
+
+        return x
 
   # =========================================================================================================
   def sampler(self, z, y=None): # identical code to "generator" above
@@ -545,6 +752,121 @@ class ALOCC_Model(object):
           h5,   [self.batch_size, s_h, s_w,     self.c_dim],    name='g_decoder_h6', with_w=True)
 
         return tf.nn.tanh(h6,name='g_output')
+
+      elif self.dataset_name in ("prosivic", "dreyeve"):
+        tmp = cfg.architecture.split("_")
+        use_pool = int(tmp[0]) == 1 # 1 or 0
+        n_conv = int(tmp[1])
+        n_dense = int(tmp[2])
+        c_out = int(tmp[3])
+        zsize = int(tmp[4])
+        ksize= int(tmp[5])
+        stride = int(tmp[6])
+        pad = int(tmp[7])
+        num_filters = c_out
+
+        if use_pool:
+          # Compute output padding and padding so that output size is same as input for deconv-layers
+          if stride != 1:
+            print("Warning: stride not 1 while using pooling. Algorithm is not built to support this")
+          else:
+            outpad = (ksize-stride)%2
+          pad = (ksize-stride+outpad)//2
+        else: # using stride to increase image size: set pad and outpad so that h_out = stride * h_in
+          if stride == 1:
+            print("No pool and stride = 1. Image size will not increase")
+          else:
+            outpad = (ksize-stride)%2
+            pad = (ksize-stride+outpad)//2
+
+        # pad = (pad,pad) # needs to be specified for both dimensions
+
+        # Encode
+        x = z
+        # Do first n_conv-1 conv layers (last one might be different)
+        for i in range(n_conv-1):
+          x = conv2d(x, num_filters, k_h=ksize, k_w=ksize, d_h=stride, d_w=stride, pad = pad, name="g_conv2d_"+str(i+1))
+          print("x: ",x.shape)
+          if cfg.use_batchnorm:
+            bn = batch_norm(name = 'g_bn_'+str(i+1))
+            x = bn(x)
+          if use_pool:
+            x = pool(x)
+          x = lrelu(x)
+          num_filters *= 2
+
+        if n_dense > 0:
+          # Add one more convlayer as above
+          x = conv2d(x, num_filters, k_h=ksize, k_w=ksize, d_h=stride, d_w=stride, pad = pad, name="g_conv2d_"+str(n_conv-1))
+          print("x: ",x.shape)
+          if cfg.use_batchnorm:
+            bn = batch_norm(name="g_bn_"+str(n_conv-1))
+            x = bn(x)
+          if use_pool:
+            x = pool(x)
+          x = lrelu(x)
+          num_filters *= 2 # TODO: Remove this?
+
+          x = linear(tf.reshape(x,[self.batch_size,-1]), zsize, name = 'g_lin_encode')
+        else:
+          # Final conv-layer is different
+            h = cfg.image_height // (2**(n_conv-1))
+            encoded = conv2d(x, num_filters, k_h=h, k_w=h, d_h=1, d_w=1, name="g_conv2d_encode", pad = 0)
+          
+        print("Encoded: ", encoded.shape)
+      
+        # Decode
+
+        if n_dense > 0:
+          h1 = self.image_height // (2**n_conv) # height = width of image going into first conv layer
+          num_filters =  c_out * (2**(n_conv-1))
+          n_dense_out = h1**2 * num_filters
+          x = linear(tf.reshape(encoded,[self.batch_size,-1]),num_filters, name = 'g_lin_decode')
+
+          x = tf.reshape(x,[self.batch_size,h1,h1,num_filters])
+          x = F.relu(x)
+          num_filters //= 2
+
+          if use_pool:
+            x = upscale(x)
+          # First deconv-layer (identical to rest, add here just to get right number of layers)
+          h = h1*2
+          output_shape = [self.batch_size, h, h, num_filters]
+          x = deconv2d(x,output_shape, k_h = ksize, k_w = ksize, d_h = stride, d_w = stride,name = 'g_deconv2d_1')
+        
+        else: # No dense layer, upscale to correct shape with unique first deconv-layer
+          x = encoded
+          h2 = self.image_height // (2**(n_conv-1)) # height of image going in to second deconv layer
+          num_filters = c_out * (2**(n_conv-2))
+          h = h2
+          output_shape = [self.batch_size, h, h, num_filters]
+          x = deconv2d(x, output_shape,  k_h = h, k_w = h, d_h = 1, d_w = 1, name = 'g_deconv2d_1')
+          bn = batch_norm(name = 'g_bn_d_1')
+          x = lrelu(bn(x))
+          
+        output_shape[1] *= 2
+        output_shape[2] *= 2
+        output_shape[3] //=2
+
+        for i in range(n_conv - 2): # Add all but last conv layer
+          if use_pool:
+            x = upscale(x)
+
+          bn = batch_norm(name = 'g_bn_d_'+str(i+2))  
+          x = lrelu(bn(deconv2d(x, output_shape,  k_h = ksize, k_w = ksize, d_h = stride, d_w = stride, name = 'g_deconv2d_'+str(i+2))))
+
+          output_shape[1] *= 2
+          output_shape[2] *= 2
+          output_shape[3] //=2
+
+        if use_pool:
+          x = upscale(x)
+
+        x = deconv2d(x, output_shape,  k_h = ksize, k_w = ksize, d_h = stride, d_w = stride, name = 'g_deconv2d_reconstruct')
+
+        x = tf.nn.tanh(self.output_layer(x), name = 'g_output')
+        
+        return x
   # =========================================================================================================
   @property
   def model_dir(self):
@@ -645,5 +967,5 @@ class ALOCC_Model(object):
 
     scipy.misc.imsave('./'+self.sample_dir+'/ALOCC_generated.jpg', montage(np.array(lst_generated_img)[:,:,:,0]))
     scipy.misc.imsave('./'+self.sample_dir+'/ALOCC_input.jpg', montage(np.array(tmp_lst_slices)[:,:,:,0]))
-
+    
     return lst_discriminator_v

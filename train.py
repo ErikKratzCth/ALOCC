@@ -2,6 +2,7 @@ import os
 import numpy as np
 from models import ALOCC_Model
 from utils import pp, visualize, to_json, show_all_variables
+from configuration import Configuration as cfg
 import tensorflow as tf
 
 flags = tf.app.flags
@@ -92,7 +93,8 @@ def main(_):
     FLAGS.train = True
 
 
-    FLAGS.sample_dir = 'export/'+FLAGS.dataset +'_%d.%d'%(nd_slice_size[0],nd_slice_size[1])
+    FLAGS.sample_dir = 'log/'+FLAGS.dataset + '/' + cfg.architecture
+    
     FLAGS.input_fname_pattern = '*'
 
     check_some_assertions()
