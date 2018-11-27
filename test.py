@@ -139,7 +139,7 @@ def main(_):
             inlier_data = x_test[specific_idx].reshape(-1, 28, 28, 1)
 
 
-            anomaly_frac = 0.1
+            anomaly_frac = 0.5
             potential_idx_anomaly = np.where(y_test != inlier_idx)[0]
             specific_idx_anomaly = [potential_idx_anomaly[x] for x in
                                    random.sample(range(0, len(potential_idx_anomaly)), math.ceil(anomaly_frac*len(specific_idx)/(1-anomaly_frac)))]
