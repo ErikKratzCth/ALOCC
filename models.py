@@ -141,15 +141,15 @@ class ALOCC_Model(object):
       if self.is_training:
         self.data = [img_to_array(load_img(Cfg.train_folder + filename)) for filename in os.listdir(Cfg.train_folder)][:n_train]
         # self._X_val = [img_to_array(load_img(Cfg.prosivic_val_folder + filename)) for filename in os.listdir(Cfg.prosivic_val_folder)][:Cfg.prosivic_n_val] 
-      else: #load test data     
-      n_test_out = Cfg.prosivic_n_test - Cfg.prosivic_n_test_in
-      _X_test_in = [img_to_array(load_img(Cfg.prosivic_test_in_folder + filename)) for filename in os.listdir(Cfg.prosivic_test_in_folder)][:Cfg.prosivic_n_test_in]
-      _X_test_out = [img_to_array(load_img(Cfg.prosivic_test_out_folder + filename)) for filename in os.listdir(Cfg.prosivic_test_out_folder)][:n_test_out]
-      _y_test_in  = np.ones((Cfg.prosivic_n_test_in,),dtype=np.int32)
-      _y_test_out = np.zeros((n_test_out,),dtype=np.int32)
-      self.data = np.concatenate([_X_test_in, _X_test_out])
-      self.test_labels = np.concatenate([_y_test_in, _y_test_out])
-      # self.out_frac = Cfg.out_frac
+      else: #load test data
+        n_test_out = Cfg.prosivic_n_test - Cfg.prosivic_n_test_in
+        _X_test_in = [img_to_array(load_img(Cfg.prosivic_test_in_folder + filename)) for filename in os.listdir(Cfg.prosivic_test_in_folder)][:Cfg.prosivic_n_test_in]
+        _X_test_out = [img_to_array(load_img(Cfg.prosivic_test_out_folder + filename)) for filename in os.listdir(Cfg.prosivic_test_out_folder)][:n_test_out]
+        _y_test_in  = np.ones((Cfg.prosivic_n_test_in,),dtype=np.int32)
+        _y_test_out = np.zeros((n_test_out,),dtype=np.int32)
+        self.data = np.concatenate([_X_test_in, _X_test_out])
+        self.test_labels = np.concatenate([_y_test_in, _y_test_out])
+        # self.out_frac = Cfg.out_frac
 
     else:
       assert('Error in loading dataset')
@@ -631,7 +631,7 @@ class ALOCC_Model(object):
           x = linear(tf.reshape(encoded,[self.batch_size,-1]),num_filters, name = 'g_lin_decode')
           # x = x.permute(0,3,1,2)
 
-          x = tf.reshape(x,[self.batch_size,h1,h1,num_filters]
+          x = tf.reshape(x,[self.batch_size,h1,h1,num_filters])
           x = F.relu(x)
           num_filters //= 2
 

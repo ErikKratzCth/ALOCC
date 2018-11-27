@@ -8,7 +8,7 @@ class Configuration(object):
     n_train = 100
     n_val = 50
     n_test = 100
-    n_test_in
+    n_test_in = 50
     out_frac = (n_test-n_test_in)/n_test
     image_height = 256
     image_width = 256
