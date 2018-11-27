@@ -108,3 +108,4 @@ log/
 checkpoint
 #montage.png
 .vscode/
+*.ipynb

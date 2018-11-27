@@ -11,6 +11,8 @@ import time
 import os
 from sklearn.metrics import roc_auc_score, average_precision_score
 import math
+import pickle
+from configuration import Configuration as cfg
 
 flags = tf.app.flags
 flags.DEFINE_integer("nStride",1,"nStride ?[1]")
@@ -35,6 +37,10 @@ flags.DEFINE_boolean("train", False, "True for training, False for testing [Fals
 
 FLAGS = flags.FLAGS
 
+def check_dir(dirname):
+    if not os.path.exists(dirname):
+        os.makedirs(dirname)
+
 def check_some_assertions():
     """
     to check some assertions in inputs and also check sth else.
@@ -44,10 +50,8 @@ def check_some_assertions():
     if FLAGS.output_width is None:
         FLAGS.output_width = FLAGS.output_height
 
-    if not os.path.exists(FLAGS.checkpoint_dir):
-        os.makedirs(FLAGS.checkpoint_dir)
-    if not os.path.exists(FLAGS.sample_dir):
-        os.makedirs(FLAGS.sample_dir)
+    check_dir(FLAGS.checkpoint_dir)
+    check_dir(FLAGS.sample_dir)
 
 def main(_):
     print('Program is started at', time.clock())
@@ -83,7 +87,9 @@ def main(_):
         FLAGS.checkpoint_dir = "checkpoint/{}_{}_{}_{}".format(
         FLAGS.dataset, FLAGS.batch_size,
         FLAGS.output_height, FLAGS.output_width)
-
+    
+    log_dir = "./log/"+cfg.dataset+"/"+cfg.architecture + "/"
+    FLAGS.sample_dir = log_dir
 
     check_some_assertions()
 
@@ -201,13 +207,13 @@ def main(_):
                 # This code for just check output for readers
                 # ...
         
-        elif FLAGS.dataset == 'bdd100k':
+        elif FLAGS.dataset in ('prosivic','dreyeve', 'bdd100k'):
             data = tmp_ALOCC_model.data
             labels = tmp_ALOCC_model.test_labels
 
         # Below is done for all datasets
-       
-        # True labels are 1 for inliers and 0 for anomalies, since the discriminator is trained for this
+        test_dir = log_dir + "test/"
+        check_dir(test_dir)
 
         # Shuffle data so not only anomaly points are removed if data is shortened below
         tmp_perm = np.random.permutation(len(data))
@@ -230,6 +236,12 @@ def main(_):
         roc_prc = average_precision_score(labels, results_d)
         print("AUPRC: ", roc_prc)
 
+        # Pickle results
+        results = [labels, results_d]
+        results_file = test_dir + "results.pkl"
+        with open(results_file,'wb') as f:
+            pickle.dump(results,f)
+            
         print('Test completed')
         exit()
         #generated_data = tmp_ALOCC_model.feed2generator(data[0:FLAGS.batch_size])
