@@ -1,1 +1,1 @@
-This is a re-implementation of https://github.com/khalooei/ALOCC-CVPR2018
+This is a an edited version of https://github.com/khalooei/ALOCC-CVPR2018
